@@ -720,8 +720,10 @@ p {
    professional moment against the magenta/teal game screens) ---------------- */
 
 .leaderboard {
-  width: 100%;
-  max-width: 720px;
+  /* Sizes to whatever the table needs, then fitToContainer() scales the
+     whole panel down so every column stays on screen at any width. */
+  width: max-content;
+  max-width: 760px;
   background: linear-gradient(180deg, #3c2b12, #241a0c);
   border: 1px solid #8a6a2c;
   border-radius: var(--radius-lg);
@@ -749,20 +751,73 @@ p {
 
 .leaderboard th {
   text-align: left;
-  font-size: 12px;
-  letter-spacing: 1.5px;
+  font-size: 11px;
+  letter-spacing: 0.8px;
   text-transform: uppercase;
   color: #d9b877;
-  padding: 6px 10px;
+  padding: 6px 7px;
   border-bottom: 2px solid #6b4f20;
+  white-space: nowrap;
+}
+
+.leaderboard th.num {
+  text-align: right;
 }
 
 .leaderboard td {
-  padding: 12px 10px;
+  padding: 10px 7px;
   font-weight: 700;
-  font-size: clamp(15px, 2vw, 19px);
+  font-size: clamp(14px, 1.7vw, 18px);
   color: #fff3de;
   border-bottom: 1px solid rgba(217, 184, 119, 0.2);
+}
+
+.leaderboard td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.leaderboard td.teamno {
+  white-space: nowrap;
+}
+
+.leaderboard td.correct {
+  color: #b9e6ff;
+}
+
+.leaderboard td.points {
+  color: #fff3de;
+}
+
+.leaderboard td.bonus {
+  color: #ff9dc4;
+}
+
+.streak-flame {
+  font-size: 0.8em;
+  color: var(--saffron);
+  white-space: nowrap;
+}
+
+/* On a phone every column still shows — the panel scales itself down to
+   fit (see fitToContainer) — but the spacing tightens up to keep the
+   scale factor, and therefore the text, as large as possible. */
+@media (max-width: 620px) {
+  .leaderboard th,
+  .leaderboard td {
+    padding: 9px 5px;
+  }
+  .leaderboard td {
+    font-size: 14px;
+  }
+  .leaderboard th {
+    font-size: 10px;
+    letter-spacing: 0.3px;
+  }
+  .leaderboard td.score {
+    font-size: 17px;
+  }
 }
 
 .leaderboard tr:last-child td {
@@ -777,24 +832,22 @@ p {
 
 .leaderboard__scroll {
   width: 100%;
-  overflow-x: auto;
+}
+
+.leaderboard table {
+  width: max-content;
+  min-width: 100%;
 }
 
 .leaderboard td.secs {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
   color: #7be6c9;
-  white-space: nowrap;
 }
 
 .leaderboard td.score {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: clamp(17px, 2.3vw, 22px);
+  font-size: clamp(16px, 2.2vw, 22px);
   color: #ffd782;
-  white-space: nowrap;
 }
 
 .leaderboard th:last-child {

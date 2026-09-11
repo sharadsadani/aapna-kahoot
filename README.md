@@ -92,16 +92,32 @@ of the link the host's **Copy player link** button generates.
    one highlighted and a count of how many teams picked each, followed
    by the standings. **The next question starts automatically after 3
    seconds** — or press **Next Question** to move on immediately.
-7. Scoring: a correct answer earns "seconds saved" = `20 − (seconds
-   taken to answer)`; a wrong or missed answer earns 0. **Score** is
-   seconds saved × 10. Both accumulate across all 40 questions, and the
-   running **top 6 teams** are shown after every question in a distinct
-   gold/brass panel.
+7. Scoring, shown as columns on the standings table:
+   - **Correct** — running count of correct answers.
+   - **Secs Saved** — `20 − (seconds taken)` for a correct answer, 0 for
+     a wrong or missed one.
+   - **Points** — seconds saved × 10.
+   - **Bonus** — streak rewards. A run of consecutive correct answers
+     earns **+50 at 3 in a row, +75 at 4, +100 at 5, +150 at 6, +250 at
+     7**, and +250 for each correct answer after that. The awards stack
+     as the run grows, so reaching 7 in a row collects 625 in total. One
+     wrong *or missed* answer resets the run to zero.
+   - **Total** — Points + Bonus. **Teams are ranked on Total.**
+
+   The running **top 6 teams** appear after every question in a distinct
+   gold/brass panel, which scales itself down so all columns stay on
+   screen even on a phone.
 8. **Pause** freezes the clock for everyone (and the 3-second
    auto-advance) so you can discuss an answer; press **Resume** and the
    timer picks up exactly where it left off. **Exit Game** ends the
    quiz immediately and jumps everyone to the final results.
 9. After question 40, the host's button reads **Show Final Results**.
+10. When a game ends — whether it finishes normally or the host presses
+    **Exit Game** — every player's session ends with it. Their phone
+    forgets that game, so the next time they open the link they land on
+    the join screen ready for a fresh PIN, rather than being pulled back
+    into the old results. There's also a **Join Another Game** button on
+    the final screen.
 
 ## Customising
 
@@ -112,5 +128,7 @@ of the link the host's **Copy player link** button generates.
 - **Host password:** change `HOST_PASSWORD` at the top of `app.js`.
 - **Gap between questions:** change `AUTO_ADVANCE_SECONDS` in `app.js`.
 - **Score multiplier:** change `SCORE_PER_SECOND` in `app.js` (default 10).
+- **Streak bonuses:** edit the `STREAK_BONUS` table in `app.js`
+  (`{3:50, 4:75, 5:100, 6:150, 7:250}`).
 - **Colours/fonts:** all in `style.css` under the `:root {}` block at
   the top.

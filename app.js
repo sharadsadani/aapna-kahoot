@@ -11,6 +11,33 @@ const AUTO_ADVANCE_SECONDS = 3;
 const SCORE_PER_SECOND = 10;
 const RING_CIRCUMFERENCE = 2 * Math.PI * 34;
 
+/* Streak bonuses. A team earns the matching bonus at the moment its run of
+   consecutive correct answers reaches that length, so a run of 7 collects
+   50 + 75 + 100 + 150 + 250 along the way. Every correct answer beyond 7
+   keeps earning the top bonus; one wrong or missed answer resets the run. */
+const STREAK_BONUS = { 3: 50, 4: 75, 5: 100, 6: 150, 7: 250 };
+const STREAK_MAX = 7;
+
+function streakBonusFor(streak) {
+  if (streak >= STREAK_MAX) return STREAK_BONUS[STREAK_MAX];
+  return STREAK_BONUS[streak] || 0;
+}
+
+/* Everything the leaderboard shows for one team, derived in one place. */
+function teamTotals(t) {
+  const secs = t.cumulativeScore || 0;
+  const points = Math.round(secs * SCORE_PER_SECOND);
+  const bonus = t.bonusPoints || 0;
+  return {
+    secs,
+    points,
+    bonus,
+    total: points + bonus,
+    correct: t.correctCount || 0,
+    streak: t.streak || 0,
+  };
+}
+
 // ---------------- runtime state ----------------
 let db = null;
 let serverOffset = 0;
@@ -21,6 +48,10 @@ let myPlayerName = null;
 
 let hostGameData = null;
 let playerGameData = null;
+
+// kept so listeners can be detached when a session ends
+let hostGameRef = null;
+let playerGameRef = null;
 
 let timerInterval = null;
 let activeTimerKey = null;
@@ -110,14 +141,21 @@ function fitTitleLine() {
 function fitToContainer(el) {
   requestAnimationFrame(() => {
     el.style.transform = "scale(1)";
+    el.style.marginBottom = "0px";
     const parent = el.parentElement;
     if (!parent) return;
     const availW = parent.clientWidth || window.innerWidth;
-    const availH = window.innerHeight * 0.6;
-    const rect = el.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const scale = Math.min(1, availW / rect.width, availH / rect.height);
-    el.style.transform = scale < 1 ? `scale(${scale})` : "scale(1)";
+    const availH = window.innerHeight * 0.62;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    if (!w || !h) return;
+    const scale = Math.min(1, availW / w, availH / h);
+    if (scale < 1) {
+      el.style.transform = `scale(${scale})`;
+      // a scaled element still reserves its full height in the layout,
+      // so pull the following content back up by what we shaved off
+      el.style.marginBottom = -Math.round(h * (1 - scale)) + "px";
+    }
   });
 }
 
@@ -226,27 +264,32 @@ function stopTimer() {
 // ---------------- leaderboard rendering ----------------
 
 function renderLeaderboard(container, teamsObj, opts = {}) {
-  const list = Object.values(teamsObj || {}).sort(
-    (a, b) => (b.cumulativeScore || 0) - (a.cumulativeScore || 0)
-  );
+  const list = Object.values(teamsObj || {})
+    .map((t) => ({ team: t, totals: teamTotals(t) }))
+    .sort((a, b) => b.totals.total - a.totals.total);
   const top = list.slice(0, 6);
   const medals = ["🥇", "🥈", "🥉"];
   let rows = top
-    .map((t, i) => {
-      const secs = t.cumulativeScore || 0;
+    .map((entry, i) => {
+      const t = entry.team;
+      const v = entry.totals;
       const isYou =
         opts.myTeamNumber != null && String(t.teamNumber) === String(opts.myTeamNumber);
+      const fire = v.streak >= 3 ? ` <span class="streak-flame" title="${v.streak} in a row">🔥${v.streak}</span>` : "";
       return `<tr class="${isYou ? "you" : ""}">
         <td class="rank">${medals[i] || i + 1}</td>
-        <td>#${escapeHtml(t.teamNumber)}</td>
-        <td>${escapeHtml(t.name || "Team " + t.teamNumber)}</td>
-        <td class="secs">${secs.toFixed(1)}s</td>
-        <td class="score">${Math.round(secs * SCORE_PER_SECOND)}</td>
+        <td class="teamno">#${escapeHtml(t.teamNumber)}</td>
+        <td class="teamname">${escapeHtml(t.name || "Team " + t.teamNumber)}${fire}</td>
+        <td class="num correct">${v.correct}</td>
+        <td class="num secs col-secs">${v.secs.toFixed(1)}s</td>
+        <td class="num points">${v.points}</td>
+        <td class="num bonus">${v.bonus ? "+" + v.bonus : "—"}</td>
+        <td class="num score">${v.total}</td>
       </tr>`;
     })
     .join("");
   if (!rows) {
-    rows = `<tr><td colspan="5" class="center-text" style="color:#d9b877">No teams have scored yet</td></tr>`;
+    rows = `<tr><td colspan="8" class="center-text" style="color:#d9b877">No teams have scored yet</td></tr>`;
   }
   container.innerHTML = `
     <div class="leaderboard__title">${opts.title || "🏆 Leaderboard"}</div>
@@ -254,8 +297,11 @@ function renderLeaderboard(container, teamsObj, opts = {}) {
     <table>
       <thead><tr>
         <th></th><th>Team</th><th>Team Name</th>
-        <th style="text-align:right">Seconds Saved</th>
-        <th style="text-align:right">Score</th>
+        <th class="num">Correct</th>
+        <th class="num col-secs">Secs Saved</th>
+        <th class="num">Points</th>
+        <th class="num">Bonus</th>
+        <th class="num">Total</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -297,7 +343,9 @@ function renderDisplayAnswers(gridEl, qMeta, opts = {}) {
 // ==================================================================
 
 function subscribeHostToGame(pin) {
-  db.ref("games/" + pin).on("value", (snap) => {
+  if (hostGameRef) hostGameRef.off();
+  hostGameRef = db.ref("games/" + pin);
+  hostGameRef.on("value", (snap) => {
     hostGameData = snap.val();
     if (hostGameData) renderHostFromState();
   });
@@ -572,21 +620,38 @@ async function triggerReveal() {
   const duration = g.qDuration || QUESTION_DURATION_MS;
 
   const updates = {};
-  Object.keys(answers).forEach((teamNo) => {
+  // Walk every team, not just the ones who answered — a missed answer has
+  // to break that team's streak just like a wrong one does.
+  Object.keys(teams).forEach((teamNo) => {
+    const t = teams[teamNo] || {};
     const a = answers[teamNo];
     let points = 0;
     let correct = false;
-    if (typeof a.choice === "number" && a.choice === realQ.correct) {
+
+    if (a && typeof a.choice === "number" && a.choice === realQ.correct) {
       correct = true;
       const submittedAt = typeof a.tSubmitted === "number" ? a.tSubmitted : qStartedAt + duration;
       const elapsedMs = Math.max(0, Math.min(duration, submittedAt - qStartedAt));
       const elapsedSec = elapsedMs / 1000;
       points = Math.max(0, round1(duration / 1000 - elapsedSec));
     }
-    updates[`games/${currentPin}/answers/${qIdx}/${teamNo}/correct`] = correct;
-    updates[`games/${currentPin}/answers/${qIdx}/${teamNo}/points`] = points;
-    const prevScore = (teams[teamNo] && teams[teamNo].cumulativeScore) || 0;
-    updates[`games/${currentPin}/teams/${teamNo}/cumulativeScore`] = round1(prevScore + points);
+
+    const newStreak = correct ? (t.streak || 0) + 1 : 0;
+    const bonus = correct ? streakBonusFor(newStreak) : 0;
+
+    if (a) {
+      updates[`games/${currentPin}/answers/${qIdx}/${teamNo}/correct`] = correct;
+      updates[`games/${currentPin}/answers/${qIdx}/${teamNo}/points`] = points;
+      updates[`games/${currentPin}/answers/${qIdx}/${teamNo}/bonus`] = bonus;
+      updates[`games/${currentPin}/answers/${qIdx}/${teamNo}/streak`] = newStreak;
+    }
+
+    const base = `games/${currentPin}/teams/${teamNo}/`;
+    updates[base + "cumulativeScore"] = round1((t.cumulativeScore || 0) + points);
+    updates[base + "bonusPoints"] = (t.bonusPoints || 0) + bonus;
+    updates[base + "correctCount"] = (t.correctCount || 0) + (correct ? 1 : 0);
+    updates[base + "streak"] = newStreak;
+    updates[base + "bestStreak"] = Math.max(t.bestStreak || 0, newStreak);
   });
   updates[`games/${currentPin}/state`] = "reveal";
 
@@ -639,6 +704,10 @@ async function playerJoin(pin, teamNumber, playerName) {
       name: playerName,
       joinedAt: firebase.database.ServerValue.TIMESTAMP,
       cumulativeScore: 0,
+      bonusPoints: 0,
+      correctCount: 0,
+      streak: 0,
+      bestStreak: 0,
     });
   } else {
     await teamRef.update({ name: playerName });
@@ -652,7 +721,9 @@ async function playerJoin(pin, teamNumber, playerName) {
 }
 
 function subscribePlayerToGame(pin) {
-  db.ref("games/" + pin).on("value", (snap) => {
+  detachPlayerListener();
+  playerGameRef = db.ref("games/" + pin);
+  playerGameRef.on("value", (snap) => {
     if (!snap.exists()) {
       handleGameGoneForPlayer();
       return;
@@ -662,16 +733,43 @@ function subscribePlayerToGame(pin) {
   });
 }
 
-function handleGameGoneForPlayer() {
+function detachPlayerListener() {
+  if (playerGameRef) {
+    playerGameRef.off();
+    playerGameRef = null;
+  }
+}
+
+/* Fully ends this device's player session: stops listening to the old
+   game and forgets it, so the next visit starts at the join screen
+   instead of being pulled back into a finished game. */
+function clearPlayerSession() {
+  detachPlayerListener();
   stopTimer();
   localStorage.removeItem("ak_player");
-  const card = document.querySelector("#screen-player-wait .card");
-  if (card) {
-    document.getElementById("playerWaitTitle").textContent = "Game not found";
-    document.getElementById("playerWaitSub").textContent =
-      "This game may have ended or the PIN changed. Ask your host for the new link.";
-  }
+  playerGameData = null;
+  currentPin = null;
+  myTeamNumber = null;
+  myPlayerName = null;
+  currentRenderedQIndexForPlayer = -1;
+}
+
+function handleGameGoneForPlayer() {
+  clearPlayerSession();
+  document.getElementById("playerWaitTitle").textContent = "Game not found";
+  document.getElementById("playerWaitSub").textContent =
+    "This game has ended or the PIN has changed. Ask your host for the new link or PIN.";
+  document.getElementById("playerWaitChip").textContent = "";
+  document.getElementById("playerWaitBack").classList.remove("hidden");
   showScreen("screen-player-wait");
+}
+
+function goToJoinScreen() {
+  clearPlayerSession();
+  document.getElementById("joinError").textContent = "";
+  document.getElementById("joinPin").value = "";
+  document.getElementById("playerWaitBack").classList.add("hidden");
+  showScreen("screen-join");
 }
 
 function renderPlayerFromState() {
@@ -695,7 +793,12 @@ function renderPlayerFromState() {
       title: "🏆 Final Results",
     });
     document.getElementById("finalHostActions").classList.add("hidden");
+    document.getElementById("playerFinalActions").classList.remove("hidden");
     showScreen("screen-final");
+    // The game is over: forget it now so a refresh or the next game starts
+    // clean, while the results stay on screen for as long as they want.
+    detachPlayerListener();
+    localStorage.removeItem("ak_player");
   }
 }
 
@@ -784,7 +887,12 @@ function renderPlayerReveal(g) {
 
   if (mine && mine.correct) {
     const pts = mine.points || 0;
-    banner.textContent = `✅ Correct! +${pts.toFixed(1)}s saved · +${Math.round(pts * SCORE_PER_SECOND)} score`;
+    const bonus = mine.bonus || 0;
+    const streak = mine.streak || 0;
+    let text = `✅ Correct! +${pts.toFixed(1)}s saved · +${Math.round(pts * SCORE_PER_SECOND)} points`;
+    if (bonus > 0) text += ` · 🔥 ${streak} in a row: +${bonus} bonus!`;
+    else if (streak >= 2) text += ` · 🔥 ${streak} in a row`;
+    banner.textContent = text;
     banner.className = "reveal-banner good";
   } else if (mine) {
     banner.textContent = `❌ Not quite — correct answer: ${qMeta.options[qMeta.correct]}`;
@@ -812,18 +920,45 @@ function handleDeepLink() {
 function tryRestorePlayerSession() {
   const saved = localStorage.getItem("ak_player");
   if (!saved) return false;
+  let parsed;
   try {
-    const { pin, teamNumber, playerName } = JSON.parse(saved);
-    if (!pin || teamNumber == null || !playerName) return false;
-    currentPin = pin;
-    myTeamNumber = String(teamNumber);
-    myPlayerName = playerName;
-    showScreen("screen-player-wait");
-    subscribePlayerToGame(pin);
-    return true;
+    parsed = JSON.parse(saved);
   } catch (e) {
+    localStorage.removeItem("ak_player");
     return false;
   }
+  const { pin, teamNumber, playerName } = parsed || {};
+  if (!pin || teamNumber == null || !playerName) {
+    localStorage.removeItem("ak_player");
+    return false;
+  }
+
+  // Only rejoin if that game is still running. A game the host has ended
+  // (or deleted) must not pull this phone back into old results.
+  document.getElementById("playerWaitTitle").textContent = "Reconnecting…";
+  document.getElementById("playerWaitSub").textContent = "Checking your last game.";
+  showScreen("screen-player-wait");
+
+  db.ref("games/" + pin)
+    .once("value")
+    .then((snap) => {
+      const g = snap.val();
+      if (!g || g.state === "ended") {
+        clearPlayerSession();
+        showScreen("screen-home");
+        return;
+      }
+      currentPin = pin;
+      myTeamNumber = String(teamNumber);
+      myPlayerName = playerName;
+      subscribePlayerToGame(pin);
+    })
+    .catch(() => {
+      clearPlayerSession();
+      showScreen("screen-home");
+    });
+
+  return true;
 }
 
 function tryRestoreHostSession() {
@@ -881,10 +1016,13 @@ function wireButtons() {
   document.getElementById("btnPause").addEventListener("click", hostTogglePause);
   document.getElementById("btnExitGame").addEventListener("click", hostExitGame);
   document.getElementById("btnNewGame").addEventListener("click", () => {
+    if (hostGameRef) hostGameRef.off();
     localStorage.removeItem("ak_host_pin");
     localStorage.removeItem("ak_player");
     location.href = location.pathname;
   });
+  document.getElementById("btnPlayerJoinAnother").addEventListener("click", goToJoinScreen);
+  document.getElementById("playerWaitBack").addEventListener("click", goToJoinScreen);
 
   document.getElementById("joinPin").addEventListener("input", (e) => {
     e.target.value = e.target.value.replace(/\D/g, "").slice(0, 4);
