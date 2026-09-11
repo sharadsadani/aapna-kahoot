@@ -24,11 +24,11 @@
      site — see README.md for the GitHub Pages steps.
 */
 const firebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY_HERE",
-  authDomain: "PASTE_YOUR_PROJECT_ID.firebaseapp.com",
+  apiKey: "AIzaSyCdpcbwv7asKSZcdE154Ik6Bwlp8KIofJ4",
+  authDomain: "aapna-kahoot.firebaseapp.com",
   databaseURL: "https://PASTE_YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-  projectId: "PASTE_YOUR_PROJECT_ID",
-  storageBucket: "PASTE_YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "PASTE_YOUR_SENDER_ID",
-  appId: "PASTE_YOUR_APP_ID",
+  projectId: "aapna-kahoot",
+  storageBucket: "aapna-kahoot.firebasestorage.app",
+  messagingSenderId: "677225599615",
+  appId: "1:677225599615:web:050395306e0c5000b5a54a",
 };
