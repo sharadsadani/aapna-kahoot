@@ -1,4 +1,4 @@
-# Aapna Kahoot — Shree Balaji Rajasthi Mandal
+# Aapna Kahoot — Shree Balaji Rajasthanii Mandal
 
 A live, colourful team quiz you can run from any laptop (host) while
 players join and answer from their own phones — hosted for free on
@@ -12,8 +12,8 @@ GitHub Pages.
 | `style.css` | Colours, fonts, layout |
 | `app.js` | Game logic — PIN generation, timer, scoring, sync |
 | `questions.js` | The 40 quiz questions — edit freely to add/change questions |
-| `firebase-config.js` | **You must edit this before the game works** |
-| `assets/logo-placeholder.svg` | Shown until you add your real logo |
+| `firebase-config.js` | Your Firebase connection settings |
+| `test.html` | Connection diagnostic page (open it if anything misbehaves) |
 
 ## 1. One-time setup: connect Firebase (2 minutes, free)
 
@@ -31,36 +31,41 @@ Google service made for exactly this.
 4. Firebase shows you a code block with a `firebaseConfig` object.
    Copy those 6-7 values into `firebase-config.js` in this folder,
    replacing the `PASTE_YOUR_...` placeholders.
-5. In the left menu, go to **Build → Realtime Database → Create
-   Database** → pick a location → start in **Test mode**.
+5. In the left sidebar, go to **Databases & Storage → Realtime
+   Database → Create Database** → pick a location → start in
+   **Test mode**.
 6. Save `firebase-config.js`.
 
-**Security note:** Test mode means anyone who has your site's link can
-read and write the database directly (not just through the app UI). For
-a one-evening community quiz this is normal and fine — just don't reuse
-this same Firebase project for anything sensitive. If you want tighter
-rules, in the Realtime Database → Rules tab you can restrict writes to
-only the `games/` path and add an expiry date; Firebase's own docs walk
-through this under "Realtime Database security rules."
+**Important — test mode expires after 30 days**, which would silently
+break the game. Go to Realtime Database → **Rules** and publish this
+instead; it never expires and limits access to just the game data:
+
+```json
+{
+  "rules": {
+    "games": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}
+```
+
+Anyone with your site link can still read and write that area, which is
+fine for a community quiz night — just don't reuse this Firebase project
+for anything sensitive.
 
 Likewise, the host password ("Sharad") only gates the host screen in
 the browser — it's a friendly speed bump for your event, not real
 authentication, since anyone can view the page's source. Don't reuse
 this password anywhere sensitive.
 
-## 2. Add your logo
-
-Drop your logo image into the `assets` folder as **`assets/logo.png`**
-(any image works — square looks best). The page automatically uses it;
-until it's there, a placeholder badge is shown instead.
-
-## 3. Put it on GitHub Pages
+## 2. Put it on GitHub Pages
 
 1. Create a new **public** repository on GitHub (e.g. `aapna-kahoot`).
-2. Upload every file in this folder to that repository, keeping the
-   `assets` folder intact (via the GitHub web UI's "Add file → Upload
-   files", or `git add . && git commit -m "Aapna Kahoot" && git push`
-   if you use git from a terminal).
+2. Upload every file in this folder to that repository (via the GitHub
+   web UI's "Add file → Upload files", or `git add . && git commit -m
+   "Aapna Kahoot" && git push` if you use git from a terminal).
 3. In the repository, go to **Settings → Pages**.
 4. Under "Build and deployment", set **Source** to "Deploy from a
    branch", branch **main**, folder **/(root)** → **Save**.
@@ -70,7 +75,7 @@ until it's there, a placeholder badge is shown instead.
 That link is your game's home page — bookmark it. It's also the base
 of the link the host's **Copy player link** button generates.
 
-## 4. Running a game night
+## 3. Running a game night
 
 1. Host opens the site → **I'm the Host** → enters password `Sharad`.
 2. Host taps **Generate PIN** — a big 4-digit PIN appears, and it's
@@ -83,14 +88,20 @@ of the link the host's **Copy player link** button generates.
    every player's own phone with a 20-second timer. A question moves
    to results as soon as every joined team has answered, or when the
    20 seconds run out — whichever comes first.
-6. Scoring: a correct answer earns "seconds saved" = `20 − (seconds
-   taken to answer)`; a wrong or missed answer earns 0. These add up
-   across all 40 questions. After every question, the host and every
-   player see the running **top 6 teams by total seconds saved**,
-   styled in a distinct gold/brass colour so it stands out from the
-   game screens.
-7. After question 40, the host's button reads **Show Final Results**
-   for the final leaderboard.
+6. On reveal, the host screen shows all four options with the correct
+   one highlighted and a count of how many teams picked each, followed
+   by the standings. **The next question starts automatically after 3
+   seconds** — or press **Next Question** to move on immediately.
+7. Scoring: a correct answer earns "seconds saved" = `20 − (seconds
+   taken to answer)`; a wrong or missed answer earns 0. **Score** is
+   seconds saved × 10. Both accumulate across all 40 questions, and the
+   running **top 6 teams** are shown after every question in a distinct
+   gold/brass panel.
+8. **Pause** freezes the clock for everyone (and the 3-second
+   auto-advance) so you can discuss an answer; press **Resume** and the
+   timer picks up exactly where it left off. **Exit Game** ends the
+   quiz immediately and jumps everyone to the final results.
+9. After question 40, the host's button reads **Show Final Results**.
 
 ## Customising
 
@@ -99,5 +110,7 @@ of the link the host's **Copy player link** button generates.
 - **Timer length:** change `QUESTION_DURATION_MS` at the top of
   `app.js` (in milliseconds; `20000` = 20 seconds).
 - **Host password:** change `HOST_PASSWORD` at the top of `app.js`.
+- **Gap between questions:** change `AUTO_ADVANCE_SECONDS` in `app.js`.
+- **Score multiplier:** change `SCORE_PER_SECOND` in `app.js` (default 10).
 - **Colours/fonts:** all in `style.css` under the `:root {}` block at
   the top.

@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Aapna Kahoot — Shree Balaji Rajasthi Mandal</title>
-<meta name="description" content="Live team quiz for Shree Balaji Rajasthi Mandal — join with a PIN and play." />
+<title>Aapna Kahoot — Shree Balaji Rajasthanii Mandal</title>
+<meta name="description" content="Live team quiz for Shree Balaji Rajasthanii Mandal — join with a PIN and play." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -15,13 +15,7 @@
 
   <!-- ===================== HEADER ===================== -->
   <header class="masthead">
-    <div class="masthead__logo">
-      <img id="logoImg" src="assets/logo.png" alt="Shree Balaji Rajasthi Mandal logo"
-           onerror="this.onerror=null;this.src='assets/logo-placeholder.svg';" />
-    </div>
-    <div class="masthead__titles">
-      <h1 class="masthead__title" id="mastTitle">Shree Balaji Rajasthi Mandal</h1>
-    </div>
+    <h1 class="masthead__title" id="mastTitle">Shree Balaji Rajasthanii Mandal</h1>
   </header>
   <h2 class="masthead__subtitle">Aapna Kahoot !!!</h2>
 
@@ -128,6 +122,8 @@
 
     <!-- ---------- HOST LIVE CONSOLE (question + reveal) ---------- -->
     <section class="screen" id="screen-host-live">
+
+      <!-- live question -->
       <div class="question-panel" id="hostQuestionPanel">
         <div class="question-top">
           <span class="chip-category" id="hostCategory">Category</span>
@@ -141,15 +137,30 @@
           </div>
         </div>
         <div class="question-text" id="hostQuestionText">—</div>
+        <div class="answers-grid answers-grid--display" id="hostAnswersGrid"></div>
         <div class="host-live-stats">
           <span class="stat-pill">Answered: <strong id="hostAnsweredCount">0</strong> / <span id="hostTeamTotal">0</span></span>
         </div>
         <button class="btn btn--magenta" id="btnRevealNow">Reveal results now</button>
       </div>
 
-      <div class="hidden" id="hostRevealPanel" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:20px;">
+      <!-- reveal: correct answer + standings -->
+      <div class="reveal-stack hidden" id="hostRevealPanel">
+        <div class="question-top">
+          <span class="chip-category" id="hostRevealCategory">Category</span>
+          <span class="chip-progress" id="hostRevealProgress">Question 1 / 40</span>
+        </div>
+        <div class="question-text" id="hostRevealQuestion">—</div>
+        <div class="answers-grid answers-grid--display" id="hostRevealAnswers"></div>
         <div class="leaderboard" id="hostLeaderboard"></div>
+        <div class="autoadvance" id="hostAutoAdvance">Next question in 3…</div>
         <button class="btn btn--teal" id="btnNextQuestion">Next Question ▶</button>
+      </div>
+
+      <!-- persistent host controls -->
+      <div class="host-controls">
+        <button class="btn btn--secondary" id="btnPause">⏸ Pause</button>
+        <button class="btn btn--danger" id="btnExitGame">⏹ Exit Game</button>
       </div>
     </section>
 
@@ -167,6 +178,7 @@
             <div class="timer-ring__num" id="pTimerNum">20</div>
           </div>
         </div>
+        <div class="paused-badge hidden" id="pPausedBadge">⏸ Game paused by host</div>
         <div class="question-text" id="pQuestionText">—</div>
         <div class="answers-grid" id="pAnswersGrid"></div>
         <div class="waiting-note hidden" id="pWaitingNote">✅ Answer locked in — waiting for other teams…</div>
@@ -176,6 +188,7 @@
     <!-- ---------- PLAYER REVEAL ---------- -->
     <section class="screen" id="screen-player-reveal">
       <div class="reveal-banner" id="pRevealBanner">—</div>
+      <div class="paused-badge hidden" id="pRevealPausedBadge">⏸ Game paused by host</div>
       <div class="leaderboard" id="pLeaderboard"></div>
     </section>
 
@@ -190,7 +203,7 @@
 
   </main>
 
-  <footer class="credit">Shree Balaji Rajasthi Mandal · Aapna Kahoot</footer>
+  <footer class="credit">Shree Balaji Rajasthanii Mandal · Aapna Kahoot</footer>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>

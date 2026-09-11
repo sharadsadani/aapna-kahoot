@@ -115,50 +115,29 @@ button {
 /* ---------------- Header ---------------- */
 
 .masthead {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding-bottom: 4px;
-}
-
-.masthead__logo {
-  flex: 0 0 auto;
-  width: clamp(52px, 8vw, 76px);
-  height: clamp(52px, 8vw, 76px);
-  border-radius: 50%;
-  overflow: hidden;
-  box-shadow: var(--shadow-soft), 0 0 0 3px var(--gold);
-  background: var(--maroon);
-}
-
-.masthead__logo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
   display: block;
-}
-
-.masthead__titles {
-  flex: 1 1 auto;
-  min-width: 0;
+  width: 100%;
+  padding-bottom: 2px;
 }
 
 .masthead__title {
   font-weight: 800;
   color: var(--gold);
-  letter-spacing: 0.3px;
+  letter-spacing: 0;
   white-space: nowrap;
   overflow: hidden;
   width: 100%;
-  line-height: 1.15;
+  text-align: center;
+  line-height: 1.1;
   text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
   /* font-size is set dynamically by fitTitleLine() in app.js so the
-     full text always stays on one line, however narrow the screen */
+     headline always spans the full width of the screen on one line */
   font-size: 40px;
 }
 
 .masthead__subtitle {
   margin-top: 14px;
+  text-align: center;
   font-weight: 800;
   font-size: clamp(22px, 5vw, 40px);
   background: linear-gradient(90deg, var(--magenta), var(--saffron) 50%, var(--teal));
@@ -796,10 +775,30 @@ p {
   color: #ffd782;
 }
 
+.leaderboard__scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
 .leaderboard td.secs {
   text-align: right;
   font-variant-numeric: tabular-nums;
   color: #7be6c9;
+  white-space: nowrap;
+}
+
+.leaderboard td.score {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(17px, 2.3vw, 22px);
+  color: #ffd782;
+  white-space: nowrap;
+}
+
+.leaderboard th:last-child {
+  color: #ffd782;
 }
 
 .leaderboard tr.you {
@@ -887,4 +886,98 @@ footer.credit {
   color: var(--muted);
   font-size: 12px;
   padding-top: 10px;
+}
+
+/* ---------------- Host display answers, reveal stack, controls ---------------- */
+
+/* answer tiles shown on the host/projector screen — read-only */
+.answers-grid--display .answer-tile {
+  cursor: default;
+  min-height: 72px;
+}
+
+.answers-grid--display .answer-tile:active {
+  transform: none;
+}
+
+.answer-tile__tally {
+  margin-left: auto;
+  flex: 0 0 auto;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.answer-tile--2 .answer-tile__tally {
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.answer-tile__check {
+  margin-left: 6px;
+  font-size: 22px;
+  flex: 0 0 auto;
+}
+
+.reveal-stack {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.autoadvance {
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--gold);
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.autoadvance.is-paused {
+  color: var(--muted);
+}
+
+.host-controls {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  max-width: 520px;
+  margin-top: 6px;
+}
+
+.host-controls .btn {
+  flex: 1 1 0;
+  font-size: 16px;
+  padding: 13px 18px;
+}
+
+.btn--danger {
+  background: linear-gradient(90deg, #e5484d, #ff7a7e);
+  color: var(--cream);
+  box-shadow: 0 8px 0 #9b2a2e, var(--shadow-soft);
+}
+
+.btn--danger:active {
+  box-shadow: 0 2px 0 #9b2a2e;
+}
+
+.paused-badge {
+  background: rgba(255, 201, 60, 0.16);
+  border: 2px solid var(--gold);
+  color: var(--gold);
+  font-weight: 800;
+  font-size: clamp(15px, 2.4vw, 19px);
+  padding: 10px 22px;
+  border-radius: 999px;
+  text-align: center;
+}
+
+.answers-grid.is-frozen .answer-tile {
+  opacity: 0.55;
+  cursor: not-allowed;
 }

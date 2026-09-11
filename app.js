@@ -7,6 +7,8 @@
 
 const HOST_PASSWORD = "Sharad";
 const QUESTION_DURATION_MS = 20000;
+const AUTO_ADVANCE_SECONDS = 3;
+const SCORE_PER_SECOND = 10;
 const RING_CIRCUMFERENCE = 2 * Math.PI * 34;
 
 // ---------------- runtime state ----------------
@@ -24,6 +26,11 @@ let timerInterval = null;
 let activeTimerKey = null;
 let revealTriggeredForQ = -1;
 let currentRenderedQIndexForPlayer = -1;
+let hostRenderedQIndex = -1;
+
+let autoAdvanceInterval = null;
+let autoAdvanceForQ = -1;
+let autoAdvanceRemaining = 0;
 
 // ---------------- small utilities ----------------
 
@@ -61,18 +68,37 @@ function showScreen(id) {
   if (target) target.classList.add("is-active");
 }
 
-/* keeps "Shree Balaji Rajasthi Mandal" on one line at any width by
-   shrinking its font-size until it fits, instead of wrapping */
+/* Sizes the masthead headline so it spans the FULL width of the screen
+   on a single line — it grows on wide screens and shrinks on narrow
+   ones, so the text never wraps and never leaves the line half empty. */
 function fitTitleLine() {
   const el = document.getElementById("mastTitle");
   if (!el) return;
   const container = el.parentElement;
   const maxWidth = container.clientWidth;
   if (!maxWidth) return;
-  let fontSize = Math.min(64, Math.max(16, Math.floor(maxWidth / 7)));
+
+  // Measure the text's natural width at a known reference size. The
+  // element is temporarily shrink-wrapped, because at width:100% its
+  // scrollWidth reports the box, not the text.
+  const REF = 100;
+  const prevWidth = el.style.width;
+  const prevDisplay = el.style.display;
+  el.style.fontSize = REF + "px";
+  el.style.width = "auto";
+  el.style.display = "inline-block";
+  const refWidth = el.getBoundingClientRect().width;
+  el.style.width = prevWidth;
+  el.style.display = prevDisplay;
+  if (!refWidth) return;
+
+  let fontSize = Math.floor((REF * maxWidth) / refWidth);
+  fontSize = Math.max(12, Math.min(fontSize, 240));
   el.style.fontSize = fontSize + "px";
+
+  // trim back a pixel at a time if rounding pushed it over the edge
   let guard = 0;
-  while (el.scrollWidth > maxWidth && fontSize > 12 && guard < 100) {
+  while (el.scrollWidth > el.clientWidth && fontSize > 12 && guard < 80) {
     fontSize -= 1;
     el.style.fontSize = fontSize + "px";
     guard++;
@@ -152,21 +178,32 @@ function describeFirebaseError(err) {
 
 // ---------------- timer ring ----------------
 
-function startTimerDisplay(getStartedAt, duration, barEl, numEl, onExpire) {
+/* While the host has the game paused, the clock is frozen at the moment
+   pause was pressed — every device reads the same frozen instant. */
+function gameNow(g) {
+  if (g && g.paused && typeof g.pausedAt === "number") return g.pausedAt;
+  return serverNow();
+}
+
+function startTimerDisplay(getGame, barEl, numEl, onExpire) {
   clearInterval(timerInterval);
   barEl.style.strokeDasharray = RING_CIRCUMFERENCE;
   let expired = false;
   function tick() {
-    const startedAt = getStartedAt();
-    if (!startedAt) return;
-    const elapsed = serverNow() - startedAt;
-    const remainingMs = Math.max(0, duration - elapsed);
+    const g = getGame();
+    if (!g || typeof g.qStartedAt !== "number") return;
+    const duration = g.qDuration || QUESTION_DURATION_MS;
+    const remainingMs = Math.max(0, duration - (gameNow(g) - g.qStartedAt));
     const remainingSec = Math.ceil(remainingMs / 1000);
     numEl.textContent = remainingSec;
     const frac = remainingMs / duration;
     barEl.style.strokeDashoffset = RING_CIRCUMFERENCE * (1 - frac);
-    barEl.style.stroke = remainingSec <= 5 ? "var(--magenta)" : "var(--teal)";
-    if (remainingMs <= 0 && !expired) {
+    barEl.style.stroke = g.paused
+      ? "var(--gold)"
+      : remainingSec <= 5
+      ? "var(--magenta)"
+      : "var(--teal)";
+    if (remainingMs <= 0 && !expired && !g.paused) {
       expired = true;
       onExpire && onExpire();
     }
@@ -175,10 +212,10 @@ function startTimerDisplay(getStartedAt, duration, barEl, numEl, onExpire) {
   timerInterval = setInterval(tick, 200);
 }
 
-function ensureTimer(key, getStartedAt, duration, barEl, numEl, onExpire) {
+function ensureTimer(key, getGame, barEl, numEl, onExpire) {
   if (activeTimerKey === key) return;
   activeTimerKey = key;
-  startTimerDisplay(getStartedAt, duration, barEl, numEl, onExpire);
+  startTimerDisplay(getGame, barEl, numEl, onExpire);
 }
 
 function stopTimer() {
@@ -196,26 +233,63 @@ function renderLeaderboard(container, teamsObj, opts = {}) {
   const medals = ["🥇", "🥈", "🥉"];
   let rows = top
     .map((t, i) => {
+      const secs = t.cumulativeScore || 0;
       const isYou =
         opts.myTeamNumber != null && String(t.teamNumber) === String(opts.myTeamNumber);
       return `<tr class="${isYou ? "you" : ""}">
         <td class="rank">${medals[i] || i + 1}</td>
         <td>#${escapeHtml(t.teamNumber)}</td>
         <td>${escapeHtml(t.name || "Team " + t.teamNumber)}</td>
-        <td class="secs">${(t.cumulativeScore || 0).toFixed(1)}s</td>
+        <td class="secs">${secs.toFixed(1)}s</td>
+        <td class="score">${Math.round(secs * SCORE_PER_SECOND)}</td>
       </tr>`;
     })
     .join("");
   if (!rows) {
-    rows = `<tr><td colspan="4" class="center-text" style="color:#d9b877">No teams have scored yet</td></tr>`;
+    rows = `<tr><td colspan="5" class="center-text" style="color:#d9b877">No teams have scored yet</td></tr>`;
   }
   container.innerHTML = `
     <div class="leaderboard__title">${opts.title || "🏆 Leaderboard"}</div>
+    <div class="leaderboard__scroll">
     <table>
-      <thead><tr><th></th><th>Team</th><th>Team Name</th><th style="text-align:right">Seconds Saved</th></tr></thead>
+      <thead><tr>
+        <th></th><th>Team</th><th>Team Name</th>
+        <th style="text-align:right">Seconds Saved</th>
+        <th style="text-align:right">Score</th>
+      </tr></thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table>
+    </div>`;
   fitToContainer(container);
+}
+
+/* Read-only answer tiles for the host/projector screen. During reveal it
+   marks the correct option and shows how many teams picked each one. */
+function renderDisplayAnswers(gridEl, qMeta, opts = {}) {
+  if (!gridEl) return;
+  const shapes = ["▲", "◆", "●", "★"];
+  gridEl.innerHTML = qMeta.options
+    .map((opt, i) => {
+      const classes = ["answer-tile", "answer-tile--" + i];
+      let check = "";
+      let tally = "";
+      if (opts.reveal) {
+        if (i === qMeta.correct) {
+          classes.push("is-correct");
+          check = '<span class="answer-tile__check">✔</span>';
+        } else {
+          classes.push("is-wrong");
+        }
+        if (opts.counts) {
+          tally = `<span class="answer-tile__tally">${opts.counts[i] || 0}</span>`;
+        }
+      }
+      return `<div class="${classes.join(" ")}">
+        <span class="answer-tile__shape">${shapes[i]}</span>
+        <span>${escapeHtml(opt)}</span>${check}${tally}
+      </div>`;
+    })
+    .join("");
 }
 
 // ==================================================================
@@ -242,10 +316,13 @@ async function hostGeneratePin() {
       qIndex: -1,
       qDuration: QUESTION_DURATION_MS,
       qStartedAt: null,
+      paused: false,
       teams: {},
     });
     currentPin = pin;
     revealTriggeredForQ = -1;
+    hostRenderedQIndex = -1;
+    cancelAutoAdvance();
     localStorage.setItem("ak_host_pin", pin);
     document.getElementById("pinDigits").textContent = pin;
     document.getElementById("pinDigits").classList.remove("is-empty");
@@ -303,18 +380,26 @@ function renderHostFromState() {
   const g = hostGameData;
   if (!g) return;
   renderLobbyTeams(g);
+  updatePauseButton(g);
 
   if (g.state === "lobby") {
     showScreen("screen-host-lobby");
     stopTimer();
+    cancelAutoAdvance();
   } else if (g.state === "question") {
     showScreen("screen-host-live");
+    cancelAutoAdvance();
     document.getElementById("hostQuestionPanel").classList.remove("hidden");
     document.getElementById("hostRevealPanel").classList.add("hidden");
     const qMeta = QUESTIONS[g.order[g.qIndex]];
     document.getElementById("hostCategory").textContent = qMeta.category;
     document.getElementById("hostProgress").textContent = `Question ${g.qIndex + 1} / ${g.order.length}`;
     document.getElementById("hostQuestionText").textContent = qMeta.q;
+
+    if (hostRenderedQIndex !== g.qIndex) {
+      hostRenderedQIndex = g.qIndex;
+      renderDisplayAnswers(document.getElementById("hostAnswersGrid"), qMeta, { reveal: false });
+    }
 
     const teams = g.teams || {};
     const teamCount = Object.keys(teams).length;
@@ -325,8 +410,7 @@ function renderHostFromState() {
 
     ensureTimer(
       "h:" + g.qIndex,
-      () => hostGameData.qStartedAt,
-      g.qDuration || QUESTION_DURATION_MS,
+      () => hostGameData,
       document.getElementById("hostTimerBar"),
       document.getElementById("hostTimerNum"),
       maybeAutoReveal
@@ -339,6 +423,23 @@ function renderHostFromState() {
     document.getElementById("hostQuestionPanel").classList.add("hidden");
     document.getElementById("hostRevealPanel").classList.remove("hidden");
     stopTimer();
+
+    const qMeta = QUESTIONS[g.order[g.qIndex]];
+    document.getElementById("hostRevealCategory").textContent = qMeta.category;
+    document.getElementById("hostRevealProgress").textContent = `Question ${g.qIndex + 1} / ${g.order.length}`;
+    document.getElementById("hostRevealQuestion").textContent = qMeta.q;
+
+    const answers = (g.answers && g.answers[g.qIndex]) || {};
+    const counts = [0, 0, 0, 0];
+    Object.keys(answers).forEach((teamNo) => {
+      const c = answers[teamNo].choice;
+      if (typeof c === "number" && counts[c] !== undefined) counts[c]++;
+    });
+    renderDisplayAnswers(document.getElementById("hostRevealAnswers"), qMeta, {
+      reveal: true,
+      counts,
+    });
+
     renderLeaderboard(document.getElementById("hostLeaderboard"), g.teams, {
       title: `🏆 Standings after Question ${g.qIndex + 1}`,
     });
@@ -346,8 +447,11 @@ function renderHostFromState() {
     document.getElementById("btnNextQuestion").textContent = isLast
       ? "Show Final Results 🏁"
       : "Next Question ▶";
+
+    scheduleAutoAdvance(g);
   } else if (g.state === "ended") {
     stopTimer();
+    cancelAutoAdvance();
     renderLeaderboard(document.getElementById("finalLeaderboard"), g.teams, {
       title: "🏆 Final Results",
     });
@@ -358,10 +462,103 @@ function renderHostFromState() {
 
 function maybeAutoReveal() {
   const g = hostGameData;
-  if (!g || g.state !== "question") return;
+  if (!g || g.state !== "question" || g.paused) return;
   if (revealTriggeredForQ === g.qIndex) return;
   revealTriggeredForQ = g.qIndex;
   triggerReveal();
+}
+
+// ---------- auto-advance to the next question after the reveal ----------
+
+function scheduleAutoAdvance(g) {
+  if (autoAdvanceForQ === g.qIndex) return;
+  autoAdvanceForQ = g.qIndex;
+  autoAdvanceRemaining = AUTO_ADVANCE_SECONDS;
+  paintAutoAdvance();
+  clearInterval(autoAdvanceInterval);
+  autoAdvanceInterval = setInterval(() => {
+    const cur = hostGameData;
+    if (!cur || cur.state !== "reveal") {
+      cancelAutoAdvance();
+      return;
+    }
+    if (cur.paused) {
+      paintAutoAdvance();
+      return;
+    }
+    autoAdvanceRemaining -= 1;
+    paintAutoAdvance();
+    if (autoAdvanceRemaining <= 0) {
+      cancelAutoAdvance();
+      hostNextQuestion();
+    }
+  }, 1000);
+}
+
+function paintAutoAdvance() {
+  const el = document.getElementById("hostAutoAdvance");
+  if (!el) return;
+  const g = hostGameData;
+  const paused = !!(g && g.paused);
+  const isLast = g && g.order && g.qIndex >= g.order.length - 1;
+  el.classList.toggle("is-paused", paused);
+  el.textContent = paused
+    ? "⏸ Paused — press Resume to continue"
+    : (isLast ? "Final results in " : "Next question in ") +
+      Math.max(0, autoAdvanceRemaining) +
+      "…";
+}
+
+function cancelAutoAdvance() {
+  clearInterval(autoAdvanceInterval);
+  autoAdvanceInterval = null;
+  autoAdvanceForQ = -1;
+}
+
+// ---------- pause / resume / exit ----------
+
+function updatePauseButton(g) {
+  const btn = document.getElementById("btnPause");
+  if (!btn) return;
+  const active = g.state === "question" || g.state === "reveal";
+  btn.disabled = !active;
+  btn.textContent = g.paused ? "▶ Resume" : "⏸ Pause";
+  btn.classList.toggle("btn--teal", !!g.paused);
+  btn.classList.toggle("btn--secondary", !g.paused);
+}
+
+async function hostTogglePause() {
+  const g = hostGameData;
+  if (!g || (g.state !== "question" && g.state !== "reveal")) return;
+  try {
+    if (g.paused) {
+      // Resume: push the question's start time forward by however long we
+      // were paused, so the remaining seconds pick up exactly where they left off.
+      const updates = { paused: false, pausedAt: null };
+      if (
+        g.state === "question" &&
+        typeof g.pausedAt === "number" &&
+        typeof g.qStartedAt === "number"
+      ) {
+        updates.qStartedAt = g.qStartedAt + (serverNow() - g.pausedAt);
+      }
+      await db.ref("games/" + currentPin).update(updates);
+    } else {
+      await db.ref("games/" + currentPin).update({ paused: true, pausedAt: serverNow() });
+    }
+  } catch (err) {
+    alert("Could not change the pause state. " + describeFirebaseError(err));
+  }
+}
+
+function hostExitGame() {
+  if (!currentPin) return;
+  if (!confirm("End the game now? Everyone will jump straight to the final results.")) return;
+  cancelAutoAdvance();
+  stopTimer();
+  db.ref("games/" + currentPin)
+    .update({ state: "ended", paused: false, pausedAt: null })
+    .catch((err) => alert("Could not end the game. " + describeFirebaseError(err)));
 }
 
 async function triggerReveal() {
@@ -405,14 +602,17 @@ function hostNextQuestion() {
   const g = hostGameData;
   if (!g) return;
   revealTriggeredForQ = -1;
+  cancelAutoAdvance();
   const nextIdx = g.qIndex + 1;
   if (nextIdx >= g.order.length) {
-    db.ref("games/" + currentPin).update({ state: "ended" });
+    db.ref("games/" + currentPin).update({ state: "ended", paused: false, pausedAt: null });
   } else {
     db.ref("games/" + currentPin).update({
       state: "question",
       qIndex: nextIdx,
       qStartedAt: firebase.database.ServerValue.TIMESTAMP,
+      paused: false,
+      pausedAt: null,
     });
   }
 }
@@ -525,19 +725,23 @@ function renderPlayerQuestion(g) {
     document.getElementById("pWaitingNote").classList.add("hidden");
   }
 
+  const paused = !!g.paused;
+  document.getElementById("pPausedBadge").classList.toggle("hidden", !paused);
+  grid.classList.toggle("is-frozen", paused);
+
   const waitingNote = document.getElementById("pWaitingNote");
-  if (myAnswer) {
-    waitingNote.classList.remove("hidden");
-    grid.querySelectorAll(".answer-tile").forEach((btn) => {
-      btn.disabled = true;
-      if (Number(btn.dataset.i) === myAnswer.choice) btn.classList.add("is-selected");
-    });
-  }
+  waitingNote.classList.toggle("hidden", !myAnswer);
+
+  const locked = paused || !!myAnswer;
+  grid.querySelectorAll(".answer-tile").forEach((btn) => {
+    btn.disabled = locked;
+    const idx = Number(btn.dataset.i);
+    btn.classList.toggle("is-selected", !!myAnswer && idx === myAnswer.choice);
+  });
 
   ensureTimer(
     "p:" + g.qIndex,
-    () => playerGameData.qStartedAt,
-    g.qDuration || QUESTION_DURATION_MS,
+    () => playerGameData,
     document.getElementById("pTimerBar"),
     document.getElementById("pTimerNum"),
     () => {}
@@ -546,6 +750,7 @@ function renderPlayerQuestion(g) {
 
 async function submitAnswer(choiceIdx) {
   if (!playerGameData || playerGameData.state !== "question") return;
+  if (playerGameData.paused) return;
   const qIdx = playerGameData.qIndex;
   const existing =
     playerGameData.answers && playerGameData.answers[qIdx] && playerGameData.answers[qIdx][myTeamNumber];
@@ -575,8 +780,11 @@ function renderPlayerReveal(g) {
   const mine = g.answers && g.answers[qIdx] && g.answers[qIdx][myTeamNumber];
   const banner = document.getElementById("pRevealBanner");
 
+  document.getElementById("pRevealPausedBadge").classList.toggle("hidden", !g.paused);
+
   if (mine && mine.correct) {
-    banner.textContent = `✅ Correct! +${(mine.points || 0).toFixed(1)}s saved`;
+    const pts = mine.points || 0;
+    banner.textContent = `✅ Correct! +${pts.toFixed(1)}s saved · +${Math.round(pts * SCORE_PER_SECOND)} score`;
     banner.className = "reveal-banner good";
   } else if (mine) {
     banner.textContent = `❌ Not quite — correct answer: ${qMeta.options[qMeta.correct]}`;
@@ -652,10 +860,15 @@ function wireButtons() {
   document.getElementById("btnGeneratePin").addEventListener("click", hostGeneratePin);
   document.getElementById("btnCopyLink").addEventListener("click", copyPlayerLink);
   document.getElementById("btnStartGame").addEventListener("click", () => {
+    revealTriggeredForQ = -1;
+    hostRenderedQIndex = -1;
+    cancelAutoAdvance();
     db.ref("games/" + currentPin).update({
       state: "question",
       qIndex: 0,
       qStartedAt: firebase.database.ServerValue.TIMESTAMP,
+      paused: false,
+      pausedAt: null,
     });
   });
   document.getElementById("btnRevealNow").addEventListener("click", () => {
@@ -665,6 +878,8 @@ function wireButtons() {
     }
   });
   document.getElementById("btnNextQuestion").addEventListener("click", hostNextQuestion);
+  document.getElementById("btnPause").addEventListener("click", hostTogglePause);
+  document.getElementById("btnExitGame").addEventListener("click", hostExitGame);
   document.getElementById("btnNewGame").addEventListener("click", () => {
     localStorage.removeItem("ak_host_pin");
     localStorage.removeItem("ak_player");

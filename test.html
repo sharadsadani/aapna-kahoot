@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Aapna Kahoot — Connection Test</title>
+<style>
+  body {
+    margin: 0;
+    padding: 24px 16px;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: #1b1035;
+    color: #fff8ee;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 4px; color: #ffc93c; }
+  .sub { color: #c9b8ea; font-size: 14px; margin-bottom: 24px; }
+  .check {
+    display: flex;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: #2c1a52;
+    border: 1px solid #52398b;
+    margin-bottom: 10px;
+    align-items: flex-start;
+  }
+  .icon { font-size: 20px; flex: 0 0 auto; line-height: 1.3; }
+  .body { flex: 1; min-width: 0; }
+  .name { font-weight: 700; }
+  .detail {
+    font-size: 13px;
+    color: #c9b8ea;
+    margin-top: 4px;
+    word-break: break-word;
+    font-family: ui-monospace, "Courier New", monospace;
+  }
+  .pass { border-color: #1fd1b0; }
+  .fail { border-color: #ff5c5c; }
+  .pass .icon { color: #1fd1b0; }
+  .fail .icon { color: #ff5c5c; }
+  #verdict {
+    margin-top: 24px;
+    padding: 18px;
+    border-radius: 12px;
+    background: #3a2468;
+    border: 2px solid #ffc93c;
+    font-size: 15px;
+  }
+  #verdict h2 { margin: 0 0 8px; font-size: 18px; color: #ffc93c; }
+  code { background: rgba(0,0,0,.35); padding: 2px 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Aapna Kahoot — Connection Test</h1>
+  <div class="sub">Checking each step between this browser and your Firebase database.</div>
+  <div id="checks"></div>
+  <div id="verdict" hidden></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+const checksEl = document.getElementById("checks");
+const results = [];
+
+function report(name, ok, detail) {
+  results.push({ name, ok });
+  const div = document.createElement("div");
+  div.className = "check " + (ok ? "pass" : "fail");
+  div.innerHTML =
+    '<div class="icon">' + (ok ? "✓" : "✕") + '</div>' +
+    '<div class="body"><div class="name">' + name + "</div>" +
+    (detail ? '<div class="detail">' + String(detail).replace(/[<>&]/g, "") + "</div>" : "") +
+    "</div>";
+  checksEl.appendChild(div);
+}
+
+function verdict(title, html) {
+  const el = document.getElementById("verdict");
+  el.hidden = false;
+  el.innerHTML = "<h2>" + title + "</h2>" + html;
+}
+
+(async function run() {
+  // 1. SDK loaded?
+  if (typeof firebase === "undefined") {
+    report("Firebase SDK loaded", false, "The firebase library did not load from gstatic.com");
+    verdict("Blocked: Firebase library could not load",
+      "Your network is blocking <code>www.gstatic.com</code>. This is common on office/corporate " +
+      "Wi-Fi. Try again on mobile data or a home network.");
+    return;
+  }
+  report("Firebase SDK loaded", true, "version " + firebase.SDK_VERSION);
+
+  // 2. Config present?
+  if (typeof firebaseConfig === "undefined" || !firebaseConfig) {
+    report("Config file loaded", false, "firebase-config.js did not load or has an error in it");
+    verdict("Config file problem", "Check that <code>firebase-config.js</code> exists in the repo and has no typos.");
+    return;
+  }
+  if (String(firebaseConfig.apiKey).indexOf("PASTE_YOUR") === 0) {
+    report("Config has real values", false, "still contains PASTE_YOUR_... placeholders");
+    verdict("Config not filled in", "Edit <code>firebase-config.js</code> and paste your real Firebase values.");
+    return;
+  }
+  report("Config has real values", true, "project: " + firebaseConfig.projectId);
+  report("Database URL", true, firebaseConfig.databaseURL);
+
+  // 3. Init
+  let db;
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    report("Firebase initialised", true, "");
+  } catch (e) {
+    report("Firebase initialised", false, e.message);
+    verdict("Could not start Firebase", "Error above. Usually a malformed config value.");
+    return;
+  }
+
+  // 4. Live connection (this is the one corporate firewalls break)
+  const connected = await new Promise((resolve) => {
+    let done = false;
+    const ref = db.ref(".info/connected");
+    const timer = setTimeout(() => {
+      if (!done) { done = true; ref.off(); resolve(false); }
+    }, 12000);
+    ref.on("value", (snap) => {
+      if (snap.val() === true && !done) {
+        done = true; clearTimeout(timer); ref.off(); resolve(true);
+      }
+    });
+  });
+
+  if (!connected) {
+    report("Live connection to database", false, "no connection after 12 seconds");
+    verdict("Blocked: cannot reach the database",
+      "The browser cannot open a live connection to <code>" + firebaseConfig.databaseURL + "</code>.<br><br>" +
+      "This is almost always a network restriction — office Wi-Fi, a VPN, or a corporate firewall " +
+      "blocking WebSocket connections to firebaseio.com.<br><br>" +
+      "<b>Try this:</b> open this same page on your phone using mobile data (not office Wi-Fi). " +
+      "If it passes there, the site is fine and you just need a different network on game night.");
+    return;
+  }
+  report("Live connection to database", true, "connected");
+
+  // 5. Read
+  try {
+    await db.ref("games").once("value");
+    report("Read permission", true, "can read /games");
+  } catch (e) {
+    report("Read permission", false, e.code + " — " + e.message);
+    verdict("Database rules block reading",
+      "Go to Firebase console → Realtime Database → <b>Rules</b> and publish:<br>" +
+      "<code>{ \"rules\": { \"games\": { \".read\": true, \".write\": true } } }</code>");
+    return;
+  }
+
+  // 6. Write
+  try {
+    await db.ref("games/_conntest").set({ probe: true, at: Date.now() });
+    report("Write permission", true, "can write to /games");
+    await db.ref("games/_conntest").remove();
+  } catch (e) {
+    report("Write permission", false, e.code + " — " + e.message);
+    verdict("Database rules block writing",
+      "Reading works but writing is denied — this is exactly what stops the PIN from generating.<br><br>" +
+      "Go to Firebase console → Realtime Database → <b>Rules</b> tab, replace everything with:<br><br>" +
+      "<code>{ \"rules\": { \"games\": { \".read\": true, \".write\": true } } }</code><br><br>" +
+      "then click <b>Publish</b>.");
+    return;
+  }
+
+  verdict("✅ Everything works",
+    "All checks passed — your game should be able to generate a PIN. " +
+    "Go back to <a href=\"index.html\" style=\"color:#1fd1b0\">the game</a> and try again. " +
+    "If it still doesn't work, do a hard refresh first (Ctrl+Shift+R, or Cmd+Shift+R on Mac).");
+})();
+</script>
+</body>
+</html>
