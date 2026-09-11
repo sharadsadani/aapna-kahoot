@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Aapna Kahoot — Shree Balaji Rajasthi Mandal</title>
+<meta name="description" content="Live team quiz for Shree Balaji Rajasthi Mandal — join with a PIN and play." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- ===================== HEADER ===================== -->
+  <header class="masthead">
+    <div class="masthead__logo">
+      <img id="logoImg" src="assets/logo.png" alt="Shree Balaji Rajasthi Mandal logo"
+           onerror="this.onerror=null;this.src='assets/logo-placeholder.svg';" />
+    </div>
+    <div class="masthead__titles">
+      <h1 class="masthead__title" id="mastTitle">Shree Balaji Rajasthi Mandal</h1>
+    </div>
+  </header>
+  <h2 class="masthead__subtitle">Aapna Kahoot !!!</h2>
+
+  <!-- ===================== STAGE ===================== -->
+  <main class="stage">
+
+    <!-- ---------- HOME / role picker ---------- -->
+    <section class="screen" id="screen-home">
+      <div class="card center-text">
+        <div class="eyebrow">Welcome</div>
+        <h2>Who's playing?</h2>
+        <p>Hosts start and run the game from one screen. Players join from their own phone using the game PIN.</p>
+      </div>
+      <div class="role-grid">
+        <div class="role-card" id="btnGoHost">
+          <div class="role-card__icon">🎙️</div>
+          <div class="role-card__title">I'm the Host</div>
+          <div class="role-card__sub">Generate a PIN and run the quiz</div>
+        </div>
+        <div class="role-card" id="btnGoPlayer">
+          <div class="role-card__icon">📱</div>
+          <div class="role-card__title">I'm a Player</div>
+          <div class="role-card__sub">Enter the PIN to join a team</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- HOST LOGIN ---------- -->
+    <section class="screen" id="screen-host-login">
+      <div class="card">
+        <div class="eyebrow">Host access</div>
+        <h2>Enter host password</h2>
+        <form id="formHostLogin" class="field" autocomplete="off">
+          <label for="hostPassword">Password</label>
+          <input id="hostPassword" type="password" placeholder="••••••••" autocomplete="off" />
+          <div class="error-text" id="hostLoginError"></div>
+          <button class="btn" type="submit">Enter host console</button>
+        </form>
+        <div class="link-row">
+          <button class="link-btn" id="btnBackFromHostLogin">← Back</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- HOST LOBBY (generate PIN) ---------- -->
+    <section class="screen" id="screen-host-lobby">
+      <div class="pin-hero">
+        <div class="pin-hero__label">Game PIN</div>
+        <div class="pin-box">
+          <div class="pin-box__digits is-empty" id="pinDigits">Tap Generate PIN</div>
+        </div>
+        <div class="btn-row" style="max-width:640px">
+          <button class="btn" id="btnGeneratePin">🎲 Generate PIN</button>
+          <button class="btn btn--teal hidden" id="btnCopyLink">🔗 Copy player link</button>
+        </div>
+        <div class="small-note" id="copyLinkFeedback">&nbsp;</div>
+      </div>
+
+      <div class="card card--wide hidden" id="lobbyTeamsCard">
+        <div class="title-row">
+          <h2>Teams in the lobby</h2>
+          <span class="chip-progress" id="lobbyTeamCount">0 joined</span>
+        </div>
+        <div class="team-chips" id="lobbyTeamChips">
+          <div class="empty-note">Waiting for teams to join with the PIN above…</div>
+        </div>
+        <button class="btn btn--magenta" id="btnStartGame" disabled>▶ Start Game</button>
+      </div>
+    </section>
+
+    <!-- ---------- JOIN (player) ---------- -->
+    <section class="screen" id="screen-join">
+      <div class="card">
+        <div class="eyebrow">Join a game</div>
+        <h2>Enter your details</h2>
+        <form id="formJoin" class="field" autocomplete="off">
+          <label for="joinTeamNumber">Team number</label>
+          <input id="joinTeamNumber" type="number" inputmode="numeric" min="1" placeholder="e.g. 4" required />
+
+          <label for="joinPlayerName">Player name</label>
+          <input id="joinPlayerName" type="text" placeholder="e.g. Rohan" maxlength="30" required />
+
+          <label for="joinPin">Game PIN</label>
+          <input id="joinPin" class="pin-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="0000" required />
+
+          <div class="error-text" id="joinError"></div>
+          <button class="btn" type="submit">Join Game</button>
+        </form>
+        <div class="link-row">
+          <button class="link-btn" id="btnBackFromJoin">← Back</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- PLAYER WAITING ROOM ---------- -->
+    <section class="screen" id="screen-player-wait">
+      <div class="card center-text">
+        <div class="spinner" style="margin: 0 auto;"></div>
+        <h2 id="playerWaitTitle">You're in!</h2>
+        <p id="playerWaitSub">Hang tight — the host will start the game shortly.</p>
+        <div class="team-chip" style="align-self:center" id="playerWaitChip"></div>
+      </div>
+    </section>
+
+    <!-- ---------- HOST LIVE CONSOLE (question + reveal) ---------- -->
+    <section class="screen" id="screen-host-live">
+      <div class="question-panel" id="hostQuestionPanel">
+        <div class="question-top">
+          <span class="chip-category" id="hostCategory">Category</span>
+          <span class="chip-progress" id="hostProgress">Question 1 / 40</span>
+          <div class="timer-ring">
+            <svg viewBox="0 0 80 80">
+              <circle class="track" cx="40" cy="40" r="34"></circle>
+              <circle class="bar" id="hostTimerBar" cx="40" cy="40" r="34"></circle>
+            </svg>
+            <div class="timer-ring__num" id="hostTimerNum">20</div>
+          </div>
+        </div>
+        <div class="question-text" id="hostQuestionText">—</div>
+        <div class="host-live-stats">
+          <span class="stat-pill">Answered: <strong id="hostAnsweredCount">0</strong> / <span id="hostTeamTotal">0</span></span>
+        </div>
+        <button class="btn btn--magenta" id="btnRevealNow">Reveal results now</button>
+      </div>
+
+      <div class="hidden" id="hostRevealPanel" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:20px;">
+        <div class="leaderboard" id="hostLeaderboard"></div>
+        <button class="btn btn--teal" id="btnNextQuestion">Next Question ▶</button>
+      </div>
+    </section>
+
+    <!-- ---------- PLAYER QUESTION ---------- -->
+    <section class="screen" id="screen-player-question">
+      <div class="question-panel">
+        <div class="question-top">
+          <span class="chip-category" id="pCategory">Category</span>
+          <span class="chip-progress" id="pProgress">Question 1 / 40</span>
+          <div class="timer-ring">
+            <svg viewBox="0 0 80 80">
+              <circle class="track" cx="40" cy="40" r="34"></circle>
+              <circle class="bar" id="pTimerBar" cx="40" cy="40" r="34"></circle>
+            </svg>
+            <div class="timer-ring__num" id="pTimerNum">20</div>
+          </div>
+        </div>
+        <div class="question-text" id="pQuestionText">—</div>
+        <div class="answers-grid" id="pAnswersGrid"></div>
+        <div class="waiting-note hidden" id="pWaitingNote">✅ Answer locked in — waiting for other teams…</div>
+      </div>
+    </section>
+
+    <!-- ---------- PLAYER REVEAL ---------- -->
+    <section class="screen" id="screen-player-reveal">
+      <div class="reveal-banner" id="pRevealBanner">—</div>
+      <div class="leaderboard" id="pLeaderboard"></div>
+    </section>
+
+    <!-- ---------- FINAL RESULTS ---------- -->
+    <section class="screen" id="screen-final">
+      <h2 class="final-hero">🏆 Final Results 🏆</h2>
+      <div class="leaderboard" id="finalLeaderboard"></div>
+      <div class="btn-row" style="max-width:420px" id="finalHostActions">
+        <button class="btn" id="btnNewGame">Start a New Game</button>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="credit">Shree Balaji Rajasthi Mandal · Aapna Kahoot</footer>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="questions.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

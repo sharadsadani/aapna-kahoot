@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="ring" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFC93C"/>
+      <stop offset="100%" stop-color="#FF9933"/>
+    </linearGradient>
+  </defs>
+  <circle cx="100" cy="100" r="94" fill="#7A1F2B" stroke="url(#ring)" stroke-width="8"/>
+  <circle cx="100" cy="100" r="76" fill="none" stroke="#FFC93C" stroke-width="2" opacity="0.6"/>
+  <text x="100" y="94" font-family="Georgia, 'Times New Roman', serif" font-size="46" font-weight="700" fill="#FFF8EE" text-anchor="middle">SBRM</text>
+  <text x="100" y="128" font-family="Georgia, 'Times New Roman', serif" font-size="14" letter-spacing="2" fill="#FFC93C" text-anchor="middle">MANDAL</text>
+</svg>
