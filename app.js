@@ -11,16 +11,52 @@ const AUTO_ADVANCE_SECONDS = 3;
 const SCORE_PER_SECOND = 10;
 const RING_CIRCUMFERENCE = 2 * Math.PI * 34;
 
-/* Streak bonuses. A team earns the matching bonus at the moment its run of
-   consecutive correct answers reaches that length, so a run of 7 collects
-   50 + 75 + 100 + 150 + 250 along the way. Every correct answer beyond 7
-   keeps earning the top bonus; one wrong or missed answer resets the run. */
-const STREAK_BONUS = { 3: 50, 4: 75, 5: 100, 6: 150, 7: 250 };
-const STREAK_MAX = 7;
+/* Streak bonuses, by length of the current run of consecutive correct
+   answers. The bonus does NOT stack within a run: a run is worth the grid
+   value for the length it reaches, so 5 in a row is worth 100 in total —
+   not 50 + 75 + 100. As a run grows, the bigger value replaces the smaller
+   one. One wrong OR missed answer ends the run; a later run then earns its
+   own bonus on top of what was already banked. */
+const STREAK_BONUS = { 3: 50, 4: 75, 5: 100, 6: 150, 7: 250, 8: 400 };
+const STREAK_MAX = 8; // 8 or more in a row all pay the same top bonus
 
 function streakBonusFor(streak) {
   if (streak >= STREAK_MAX) return STREAK_BONUS[STREAK_MAX];
   return STREAK_BONUS[streak] || 0;
+}
+
+/* What to ADD to a team's banked bonus this question: only the increase
+   over whatever the current run has already paid out. */
+function streakBonusDelta(prevStreak, newStreak) {
+  if (newStreak <= 0) return 0;
+  return Math.max(0, streakBonusFor(newStreak) - streakBonusFor(prevStreak));
+}
+
+/* One team's result for one question, as a pure function so the scoring
+   rules can be verified on their own. */
+function scoreAnswer(team, answer, correctIdx, qStartedAt, durationMs) {
+  const prevStreak = (team && team.streak) || 0;
+  let correct = false;
+  let points = 0;
+
+  if (answer && typeof answer.choice === "number" && answer.choice === correctIdx) {
+    correct = true;
+    const submittedAt =
+      typeof answer.tSubmitted === "number" ? answer.tSubmitted : qStartedAt + durationMs;
+    const elapsedMs = Math.max(0, Math.min(durationMs, submittedAt - qStartedAt));
+    points = Math.max(0, round1(durationMs / 1000 - elapsedMs / 1000));
+  }
+
+  const newStreak = correct ? prevStreak + 1 : 0;
+  const bonusAdded = correct ? streakBonusDelta(prevStreak, newStreak) : 0;
+
+  return {
+    correct,
+    points,
+    newStreak,
+    bonusAdded,
+    runBonus: streakBonusFor(newStreak), // what this run is worth in total
+  };
 }
 
 /* Everything the leaderboard shows for one team, derived in one place. */
@@ -299,9 +335,9 @@ function renderLeaderboard(container, teamsObj, opts = {}) {
         <th></th><th>Team</th><th>Team Name</th>
         <th class="num">Correct</th>
         <th class="num col-secs">Secs Saved</th>
-        <th class="num">Points</th>
+        <th class="num">Score</th>
         <th class="num">Bonus</th>
-        <th class="num">Total</th>
+        <th class="num">Grand Total</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -625,33 +661,23 @@ async function triggerReveal() {
   Object.keys(teams).forEach((teamNo) => {
     const t = teams[teamNo] || {};
     const a = answers[teamNo];
-    let points = 0;
-    let correct = false;
-
-    if (a && typeof a.choice === "number" && a.choice === realQ.correct) {
-      correct = true;
-      const submittedAt = typeof a.tSubmitted === "number" ? a.tSubmitted : qStartedAt + duration;
-      const elapsedMs = Math.max(0, Math.min(duration, submittedAt - qStartedAt));
-      const elapsedSec = elapsedMs / 1000;
-      points = Math.max(0, round1(duration / 1000 - elapsedSec));
-    }
-
-    const newStreak = correct ? (t.streak || 0) + 1 : 0;
-    const bonus = correct ? streakBonusFor(newStreak) : 0;
+    const r = scoreAnswer(t, a, realQ.correct, qStartedAt, duration);
 
     if (a) {
-      updates[`games/${currentPin}/answers/${qIdx}/${teamNo}/correct`] = correct;
-      updates[`games/${currentPin}/answers/${qIdx}/${teamNo}/points`] = points;
-      updates[`games/${currentPin}/answers/${qIdx}/${teamNo}/bonus`] = bonus;
-      updates[`games/${currentPin}/answers/${qIdx}/${teamNo}/streak`] = newStreak;
+      const ans = `games/${currentPin}/answers/${qIdx}/${teamNo}/`;
+      updates[ans + "correct"] = r.correct;
+      updates[ans + "points"] = r.points;
+      updates[ans + "bonus"] = r.bonusAdded;
+      updates[ans + "runBonus"] = r.runBonus;
+      updates[ans + "streak"] = r.newStreak;
     }
 
     const base = `games/${currentPin}/teams/${teamNo}/`;
-    updates[base + "cumulativeScore"] = round1((t.cumulativeScore || 0) + points);
-    updates[base + "bonusPoints"] = (t.bonusPoints || 0) + bonus;
-    updates[base + "correctCount"] = (t.correctCount || 0) + (correct ? 1 : 0);
-    updates[base + "streak"] = newStreak;
-    updates[base + "bestStreak"] = Math.max(t.bestStreak || 0, newStreak);
+    updates[base + "cumulativeScore"] = round1((t.cumulativeScore || 0) + r.points);
+    updates[base + "bonusPoints"] = (t.bonusPoints || 0) + r.bonusAdded;
+    updates[base + "correctCount"] = (t.correctCount || 0) + (r.correct ? 1 : 0);
+    updates[base + "streak"] = r.newStreak;
+    updates[base + "bestStreak"] = Math.max(t.bestStreak || 0, r.newStreak);
   });
   updates[`games/${currentPin}/state`] = "reveal";
 
@@ -887,11 +913,11 @@ function renderPlayerReveal(g) {
 
   if (mine && mine.correct) {
     const pts = mine.points || 0;
-    const bonus = mine.bonus || 0;
+    const runBonus = mine.runBonus || 0;
     const streak = mine.streak || 0;
     let text = `✅ Correct! +${pts.toFixed(1)}s saved · +${Math.round(pts * SCORE_PER_SECOND)} points`;
-    if (bonus > 0) text += ` · 🔥 ${streak} in a row: +${bonus} bonus!`;
-    else if (streak >= 2) text += ` · 🔥 ${streak} in a row`;
+    if (runBonus > 0) text += ` · 🔥 ${streak} in a row — ${runBonus} bonus!`;
+    else if (streak === 2) text += ` · 🔥 2 in a row — one more for a 50 bonus!`;
     banner.textContent = text;
     banner.className = "reveal-banner good";
   } else if (mine) {

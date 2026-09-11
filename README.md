@@ -96,13 +96,25 @@ of the link the host's **Copy player link** button generates.
    - **Correct** — running count of correct answers.
    - **Secs Saved** — `20 − (seconds taken)` for a correct answer, 0 for
      a wrong or missed one.
-   - **Points** — seconds saved × 10.
-   - **Bonus** — streak rewards. A run of consecutive correct answers
-     earns **+50 at 3 in a row, +75 at 4, +100 at 5, +150 at 6, +250 at
-     7**, and +250 for each correct answer after that. The awards stack
-     as the run grows, so reaching 7 in a row collects 625 in total. One
-     wrong *or missed* answer resets the run to zero.
-   - **Total** — Points + Bonus. **Teams are ranked on Total.**
+   - **Score** — seconds saved × 10.
+   - **Bonus** — streak reward for a run of consecutive correct answers:
+
+     | In a row | Bonus |
+     |---|---|
+     | 3 | 50 |
+     | 4 | 75 |
+     | 5 | 100 |
+     | 6 | 150 |
+     | 7 | 250 |
+     | 8 or more | 400 |
+
+     The bonus does **not** stack within a run — a run is worth the grid
+     value for the length it reaches, so 5 in a row is worth 100 in
+     total, not 50 + 75 + 100. As the run grows the larger value replaces
+     the smaller one. One wrong *or missed* answer ends the run; a later
+     run earns its own bonus on top of what is already banked (a run of 5
+     followed by a run of 3 banks 100 + 50 = 150).
+   - **Grand Total** — Score + Bonus. **Teams are ranked on Grand Total.**
 
    The running **top 6 teams** appear after every question in a distinct
    gold/brass panel, which scales itself down so all columns stay on
@@ -129,6 +141,7 @@ of the link the host's **Copy player link** button generates.
 - **Gap between questions:** change `AUTO_ADVANCE_SECONDS` in `app.js`.
 - **Score multiplier:** change `SCORE_PER_SECOND` in `app.js` (default 10).
 - **Streak bonuses:** edit the `STREAK_BONUS` table in `app.js`
-  (`{3:50, 4:75, 5:100, 6:150, 7:250}`).
+  (`{3:50, 4:75, 5:100, 6:150, 7:250, 8:400}`); `STREAK_MAX` sets the
+  length at which the top bonus applies to everything above it.
 - **Colours/fonts:** all in `style.css` under the `:root {}` block at
   the top.
